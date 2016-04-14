@@ -10,6 +10,7 @@ http://gnosis.cx/publish/programming/sockets.html
 #include <string.h>
 #include <unistd.h>
 #include <netinet/in.h>
+#include "time.c"
 
 #define BUFFSIZE 0x10000
 void Die(char *mess) { perror(mess); exit(1); }
@@ -22,6 +23,7 @@ int main(int argc, char *argv[]) {
   unsigned int echolen;
   long long int received;
   ssize_t bytes;
+  struct timeval t0, t1 , td;
 
   if (argc != 4) {
     fprintf(stderr, "USAGE: bulkclient <server_ip> <port> <data-length-requested>\n");
@@ -52,16 +54,24 @@ int main(int argc, char *argv[]) {
     Die("Mismatch in number of sent bytes");
   }
   /* Receive data back from the server */
-  fprintf(stdout, "Received: ");
+
+  gettimeofday(&t0, NULL);
   received = 0;
   do {
     bytes = recv(sock, buffer, BUFFSIZE, 0);
     received += bytes;
   } while (bytes > 0);
+  gettimeofday(&t1, NULL);
+  timeval_subtract(&td,&t1,&t0);
         
 
- fprintf(stdout, " %lld\n",received);
- close(sock);
- exit(0);
+  fprintf(stdout, "Received: %lld bytes in %s secs\n",received,timeval_to_str(&td));
+  double rxd = (double)received;
+  double elapsed = (double)timeval_to_int(&td)/(double)1000000;
+  /* fprintf(stdout, "approx bandwidth = %f/%f = %f\n",rxd,elapsed,rxd/elapsed); */
+  /* fprintf(stdout, "approx bandwidth = %f/%f = %f Mbps\n",rxd,elapsed,rxd/(1000000*elapsed)); */
+  fprintf(stdout, "approx bandwidth %f Mbps\n",(8*rxd)/(1000000*elapsed));
+  close(sock);
+  exit(0);
 }
 

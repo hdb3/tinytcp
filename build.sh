@@ -1,3 +1,3 @@
 #!/bin/bash -ve
-gcc -o client client.c
-gcc -o server server.c
+gcc -o bulkclient bulkclient.c
+gcc -o bulkserver bulkserver.c
