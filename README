@@ -1,0 +1,10 @@
+I want to build a utility set for sending and receiving data over a simple TCP connection, for performance measurement purposes.
+
+As a start I have borrowed some simple code that I found in a tutorial, at http://gnosis.cx/publish/programming/sockets.html.
+
+The extensions to this will initially:
+
+server - generate a large response stream, based the the client requested length
+client - request a variable payload length, and discard the response (but display the length of it).
+
+Alternative operational mode: send a large stream, and wait for a confirmation message.
