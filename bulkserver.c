@@ -10,10 +10,13 @@
 #include <string.h>
 #include <unistd.h>
 #include <netinet/in.h>
+#include <sys/sendfile.h>
+#include <fcntl.h>
 
 #define MAXPENDING 5    /* Max connection requests */
 #define BUFFSIZE 32
 #define BLOCKSIZE 0x10000
+#define ZEROCOPY
 void Die(char *mess) { perror(mess); exit(1); }
 
 void HandleClient(int sock) {
@@ -35,6 +38,23 @@ void HandleClient(int sock) {
       Die("Failed to parse client request");
     }
   /* Send bytes and check for more incoming data in loop */
+#ifdef ZEROCOPY
+
+  char tmpn[] = "/tmp/XXXXXX" ; 
+  int   tmpfd = mkstemp(tmpn);
+  ftruncate(tmpfd,respsize);
+  long long int sent_bytes = sendfile(sock, tmpfd, 0, respsize);
+  if (sent_bytes != respsize) {
+    fprintf(stderr,"Failed to send bytes to client (%qd/%qd)\n",sent_bytes,respsize);
+    if (errno) {
+      perror(NULL);
+    }
+    exit(1);
+  }
+  close(tmpfd);
+  unlink(tmpn);
+  
+#else
   while (respsize > 0) {
     sendsize = respsize > BLOCKSIZE ? BLOCKSIZE : respsize;
     respsize -= sendsize;
@@ -43,6 +63,7 @@ void HandleClient(int sock) {
       Die("Failed to send bytes to client");
     }
   }
+#endif
   close(sock);
 }
 
@@ -56,6 +77,9 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "USAGE: echoserver <port>\n");
     exit(1);
   }
+#ifdef ZEROCOPY
+  fprintf("using zero copy\n");
+#endif
   /* Create the TCP socket */
   if ((serversock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
     Die("Failed to create socket");
