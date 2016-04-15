@@ -17,6 +17,8 @@
 #define BUFFSIZE 32
 #define BLOCKSIZE 0x10000
 #define ZEROCOPY
+/* MAX_RW_COUNT is defined in the linux headers in fs.h and is INT_MAX & PAGE_CACHE_MASK = 2 * 1024^3 - 4096 */
+#define MAX_RW_COUNT 2147479552
 void Die(char *mess) { perror(mess); exit(1); }
 
 void HandleClient(int sock) {
@@ -43,14 +45,16 @@ void HandleClient(int sock) {
   char tmpn[] = "/tmp/XXXXXX" ; 
   int   tmpfd = mkstemp(tmpn);
   ftruncate(tmpfd,respsize);
-  long long int sent_bytes = sendfile(sock, tmpfd, 0, respsize);
-  if (sent_bytes != respsize) {
-    fprintf(stderr,"Failed to send bytes to client (%qd/%qd)\n",sent_bytes,respsize);
-    if (errno) {
-      perror(NULL);
+
+  while (respsize > 0) {
+    sendsize = respsize > MAX_RW_COUNT ? MAX_RW_COUNT : respsize;
+    respsize -= sendsize;
+    /* Send the next block */
+    if (sendfile(sock, tmpfd, 0, sendsize) != sendsize) {
+      Die("Failed to send bytes to client");
     }
-    exit(1);
   }
+
   close(tmpfd);
   unlink(tmpn);
   
