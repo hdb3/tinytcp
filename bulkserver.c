@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 #ifdef ZEROCOPY
-  fprintf("using zero copy\n");
+  fprintf(stdout, "using zero copy\n");
 #endif
   /* Create the TCP socket */
   if ((serversock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
