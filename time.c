@@ -4,7 +4,7 @@
 
 #include <sys/time.h>
 #include <time.h>
-#include <stdio.h>
+
 long long int
 timeval_to_int (struct timeval *tval)
 {
@@ -15,7 +15,7 @@ char*
 timeval_to_str (struct timeval *tval)
 {
   char* tmp;
-  asprintf(&tmp,"%d.%06d",tval->tv_sec,tval->tv_usec);
+  asprintf(&tmp,"%ld.%06ld",tval->tv_sec,tval->tv_usec);
   return tmp;
 }
 

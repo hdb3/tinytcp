@@ -1,3 +1,3 @@
 #!/bin/bash -ve
-gcc -o bulkclient bulkclient.c
-gcc -o bulkserver bulkserver.c
+gcc -D_GNU_SOURCE -o bulkclient bulkclient.c
+gcc -D_GNU_SOURCE -o bulkserver bulkserver.c
