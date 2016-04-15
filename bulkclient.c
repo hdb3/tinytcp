@@ -9,16 +9,19 @@ http://gnosis.cx/publish/programming/sockets.html
 #include <string.h>
 #include <unistd.h>
 #include <netinet/in.h>
+#include <sys/sysinfo.h>
 #include "time.c"
 
-#define BUFFSIZE 0x10000
+/* MAX_RW_COUNT is defined in the linux headers in fs.h and is INT_MAX & PAGE_CACHE_MASK = 2 * 1024^3 - 4096 */
+#define MAX_RW_COUNT 2147479552
+#define MEGABYTE (2<<19)
 void Die(char *mess) { perror(mess); exit(1); }
 
 
 int main(int argc, char *argv[]) {
   int sock;
   struct sockaddr_in echoserver;
-  char buffer[BUFFSIZE];
+  char* buffer=NULL;
   unsigned int echolen;
   long long int received;
   ssize_t bytes;
@@ -27,6 +30,21 @@ int main(int argc, char *argv[]) {
   if (argc != 4) {
     fprintf(stderr, "USAGE: bulkclient <server_ip> <port> <data-length-requested>\n");
     exit(1);
+  }
+
+  /* allocate a large buffer, dependent on free memorty! */
+  struct sysinfo si;
+  sysinfo(&si);
+  /* fprintf(stderr,"freememory: %ldM total memory: %ldM memunit %d\n",
+          si.freeram/MEGABYTE,
+          si.totalram/MEGABYTE,
+          si.mem_unit);
+  */
+  int alloc_req = MAX_RW_COUNT < (si.freeram/2) ? MAX_RW_COUNT : si.freeram/2;
+  fprintf(stderr,"allocating %dM buffer\n",alloc_req/MEGABYTE);
+  buffer=malloc(alloc_req);
+  if (NULL==buffer) {
+    Die("Failed to allocate buffer");
   }
   /* Create the TCP socket */
   if ((sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
@@ -57,7 +75,7 @@ int main(int argc, char *argv[]) {
   gettimeofday(&t0, NULL);
   received = 0;
   do {
-    bytes = recv(sock, buffer, BUFFSIZE, 0);
+    bytes = recv(sock, buffer, alloc_req, 0);
     received += bytes;
   } while (bytes > 0);
   gettimeofday(&t1, NULL);
