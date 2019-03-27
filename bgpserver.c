@@ -67,14 +67,14 @@ void printHex ( FILE * fd, unsigned char *buf, unsigned int l) {
       free(hex);
 }
 
-int getBGPMessage (int sock) {
+int getBGPMessage ( FILE * fsock) {
   unsigned char header[19];
   unsigned char payload[BUFFSIZE];
   int received;
   unsigned int pl;
   unsigned char msgtype;
 
-  received = recv(sock, header, 19, 0);
+  received = fread(header, 1,19,fsock);
   if (0 == received ) {
     fprintf(stderr, "end of stream\n");
     return 0;
@@ -86,15 +86,9 @@ int getBGPMessage (int sock) {
     pl = ( header[16] << 8 ) + ( header[17] ) - 19 ;
     msgtype = header[18];
     if (0 < pl) {
-        if ((received = recv(sock, payload, pl, 0)) != pl) {
+        if ((received = fread(payload, 1, pl, fsock)) != pl) {
           fprintf(stderr,"Failed to receive msg payload from peer (%d/%d)",received,pl);
-          // exit(1);
-          int r2 = recv(sock, payload+received, pl-received,0);
-          if (r2>0)
-             received += r2;
-          else {
-              fprintf(stderr,"Failed to again to receive msg payload from peer (%d/%d)",received,pl);
-              exit(1);
+          exit(1);
           }
         } else
           received = 0;
@@ -105,7 +99,6 @@ int getBGPMessage (int sock) {
         free(hex);
     } else
         fprintf(stderr,"+");
-  }
   return 1;
 }
 
@@ -115,20 +108,21 @@ void session(int sock, int fd1 , int fd2) {
   setsockopt( sock, IPPROTO_TCP, TCP_NODELAY, (void *)&i, sizeof(i));
   lseek(fd1,0,0);
   lseek(fd2,0,0);
+  FILE *fsock = fdopen(sock,"r");
 
   (0 < sendfile(sock, fd1, 0, 0x7ffff000)) || die("Failed to send fd1 to peer");
 
-  getBGPMessage (sock); // this is expected to be an Open
+  getBGPMessage (fsock); // this is expected to be an Open
 
   (0 < send(sock, keepalive, 19, 0)) || die("Failed to send keepalive to peer");
 
-  getBGPMessage (sock); // this is expected to be a Keepalive
+  getBGPMessage (fsock); // this is expected to be a Keepalive
 
   (0 < sendfile(sock, fd2, 0, 0x7ffff000)) || die("Failed to send fd2 to peer");
 
   int res;
   do {
-    res = getBGPMessage (sock); // keepalive or updates from now on
+    res = getBGPMessage (fsock); // keepalive or updates from now on
   } while (res);
   close(sock);
 }
