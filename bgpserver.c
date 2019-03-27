@@ -1,5 +1,5 @@
 
-/* bgpserver - forked from echoserver.c */
+/* bgpserver - forked from peeraddr.c */
 
 #include <stdio.h>
 #include <errno.h>
@@ -14,6 +14,7 @@
 
 #define MAXPENDING 5    // Max connection requests
 #define BUFFSIZE 0x10000
+#define SOCKADDRSZ (sizeof (struct sockaddr_in))
 
 void die(char *mess) { perror(mess); exit(1); }
 unsigned char keepalive [19]={ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 19, 4  };
@@ -122,17 +123,15 @@ void session(int sock, int fd1 , int fd2) {
   close(sock);
 }
 
-
 void main(int argc, char *argv[]) {
   int serversock, peersock, fd1,fd2;
-  struct sockaddr_in listensocket, peersocket;
-  fprintf(stderr, "bgpserver\n");
+  struct sockaddr_in peeraddr;
 
-  if (argc != 3) {
-    fprintf(stderr, "USAGE: bgpserver <open_message_file> <update_message_file>\n");
-    exit(1);
+  fprintf(stderr, "bgpc\n");
+  if (3 > argc) {
+      fprintf(stderr, "USAGE: bgpc <open_message_file> <update_message_file> {IP address}\n");
+      exit(1);
   }
-
   if ((fd1 = open(argv[1],O_RDONLY)) < 0) {
     die("Failed to open BGP Open message file");
   }
@@ -141,29 +140,47 @@ void main(int argc, char *argv[]) {
     die("Failed to open BGP Update message file");
   }
 
-  if ((serversock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-    die("Failed to create socket");
-  }
-
-  memset(&listensocket, 0, sizeof(listensocket));
-  listensocket.sin_family = AF_INET;
-  listensocket.sin_addr.s_addr = htonl(INADDR_ANY);   // local server addr - wildcard - could be a specific interface
-  listensocket.sin_port = htons(179);       // BGP server port
-
-  if (bind(serversock, (struct sockaddr *) &listensocket, sizeof(listensocket)) < 0) {
-    die("Failed to bind the server socket");
-  }
-
-  if (listen(serversock, MAXPENDING) < 0) {
-    die("Failed to listen on server socket");
-  }
-
-  while (1) {
-    unsigned int peerlen = sizeof(peersocket);
-    if ((peersock = accept(serversock, (struct sockaddr *) &peersocket, &peerlen)) < 0) {
-      die("Failed to accept peer connection");
+  if (3 == argc) { // server mode.....
+    if ((serversock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+      die("Failed to create socket");
     }
-    fprintf(stdout, "Peer connected: %s\n", inet_ntoa(peersocket.sin_addr));
-    session(peersock,fd1,fd2);
+  
+    memset(&peeraddr, 0, SOCKADDRSZ );
+    peeraddr.sin_family = AF_INET;
+    peeraddr.sin_addr.s_addr = htonl(INADDR_ANY);   // local server addr - wildcard - could be a specific interface
+    peeraddr.sin_port = htons(179);       // BGP server port
+  
+    if (bind(serversock, (struct sockaddr *) &peeraddr, SOCKADDRSZ ) < 0) {
+      die("Failed to bind the server socket");
+    }
+  
+    if (listen(serversock, MAXPENDING) < 0) {
+      die("Failed to listen on server socket");
+    }
+  
+    while (1) {
+      unsigned int addrsize;
+      fprintf(stderr, "waiting for connection\n");
+      if ((peersock = accept(serversock, (struct sockaddr *) &peeraddr, &addrsize )) < 0) {
+        die("Failed to accept peer connection");
+      }
+      if ( addrsize != SOCKADDRSZ || AF_INET != peeraddr.sin_family) {
+        die("bad sockaddr");
+      }
+      fprintf(stderr, "Peer connected: %s\n", inet_ntoa(peeraddr.sin_addr));
+      session(peersock,fd1,fd2);
+    }
+  } else { // client mode
+      fprintf(stderr, "Connecting to: %s\n", argv[3]);
+      memset(&peeraddr, 0, SOCKADDRSZ );
+      peeraddr.sin_family = AF_INET;
+      peeraddr.sin_addr.s_addr = inet_addr(argv[3]);
+      peeraddr.sin_port = 179;
+      if (connect(peersock, (struct sockaddr *) &peeraddr, SOCKADDRSZ ) < 0) {
+        die("Failed to connect with peer");
+      } else {
+          fprintf(stderr, "Peer connected: %s\n", argv[3]);
+          session(peersock,fd1,fd2);
+      }
   }
 }
