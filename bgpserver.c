@@ -24,7 +24,7 @@ int isMarker (const unsigned char *buf) {
    return ( 0 == memcmp(buf,marker,16));
 }
 
-unsigned char * showtype (unsigned char msgtype) {
+char * showtype (unsigned char msgtype) {
    switch(msgtype) {
       case 1 : return "OPEN";
           break;
@@ -94,13 +94,12 @@ int getBGPMessage (int sock) {
     unsigned char *hex = toHex (payload,pl) ;
     fprintf(stderr, "BGP msg type %s length %d received [%s]\n", showtype(msgtype), pl , hex);
     free(hex);
-    return 1;
   }
+  return 1;
 }
 
 
 void session(int sock, int fd1 , int fd2) {
-  int c;
   int i = 1;
   setsockopt( sock, IPPROTO_TCP, TCP_NODELAY, (void *)&i, sizeof(i));
 
@@ -121,7 +120,7 @@ void session(int sock, int fd1 , int fd2) {
   close(sock);
 }
 
-void main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
   int serversock, peersock, fd1,fd2;
   struct sockaddr_in peeraddr;
 
