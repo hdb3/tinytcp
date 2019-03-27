@@ -67,8 +67,10 @@ void printHex ( FILE * fd, unsigned char *buf, unsigned int l) {
 
 int getBGPMessage (int sock) {
   unsigned char header[19];
-  unsigned char buffer[BUFFSIZE];
+  unsigned char payload[BUFFSIZE];
   int received;
+  unsigned int pl;
+  unsigned char msgtype;
 
   received = recv(sock, header, 19, 0);
   if (0 == received ) {
@@ -77,16 +79,19 @@ int getBGPMessage (int sock) {
   } else if (received < 19) {
     die("Failed to receive msg  header from peer");
     return 0;
+  } else if (!isMarker(header)) {
+    die("Failed to find BGP marker in msg header from peer");
   } else {
     printHex (stderr,header,19);
-    unsigned int pl = header[16] << 8 + header[17] - 19 ;
-    unsigned char msgtype = header[18];
-    if ((received = recv(sock, header, pl, 0)) != pl) {
-      die("Failed to receive msg payload from peer");
-    } else if (!isMarker(header)) {
-      die("Failed to find BGP marker in msg header from peer");
+    pl = ( header[16] << 8 ) + ( header[17] ) - 19 ;
+    msgtype = header[18];
+    fprintf(stderr,"header: msgtype=%d payload length = %d\n",msgtype,pl);
+    fprintf(stderr,"header: (%d,%d,%d)\n",header[16],header[17],header[18]);
+    if ((received = recv(sock, payload, pl, 0)) != pl) {
+      fprintf(stderr,"Failed to receive msg payload from peer (%d/%d)",received,pl);
+      exit(1);
     } else {
-      unsigned char *hex = toHex (buffer,pl) ;
+      unsigned char *hex = toHex (payload,pl) ;
       fprintf(stderr, "BGP msg type %s length %d received [%s]\n", showtype(msgtype), pl , hex);
       free(hex);
       return 1;
