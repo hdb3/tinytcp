@@ -9,6 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/sendfile.h>
 #include <fcntl.h>
 
@@ -16,9 +17,9 @@
 #define BUFFSIZE 0x10000
 #define SOCKADDRSZ (sizeof (struct sockaddr_in))
 
-void die(char *mess) { perror(mess); exit(1); }
-unsigned char keepalive [19]={ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 19, 4  };
-unsigned char marker [16]={ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff  };
+int die(char *mess) { perror(mess); exit(1); }
+unsigned char keepalive [19]={ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 19, 4 };
+unsigned char marker [16]={ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 int isMarker (const unsigned char *buf) {
    return ( 0 == memcmp(buf,marker,16));
 }
@@ -26,14 +27,14 @@ int isMarker (const unsigned char *buf) {
 unsigned char * showtype (unsigned char msgtype) {
    switch(msgtype) {
       case 1 : return "OPEN";
-          break; 
+          break;
       case 2 : return "UPDATE";
-          break; 
+          break;
       case 3 : return "NOTIFICATION";
-          break; 
+          break;
       case 4 : return "KEEPALIVE";
-          break; 
-      default  : return "UNKNOWN";
+          break;
+      default : return "UNKNOWN";
     }
 }
 
@@ -77,54 +78,41 @@ int getBGPMessage (int sock) {
     fprintf(stderr, "end of stream\n");
     return 0;
   } else if (received < 19) {
-    die("Failed to receive msg  header from peer");
-    return 0;
+    die("Failed to receive msg header from peer");
   } else if (!isMarker(header)) {
     die("Failed to find BGP marker in msg header from peer");
   } else {
-    printHex (stderr,header,19);
     pl = ( header[16] << 8 ) + ( header[17] ) - 19 ;
     msgtype = header[18];
-    fprintf(stderr,"header: msgtype=%d payload length = %d\n",msgtype,pl);
-    fprintf(stderr,"header: (%d,%d,%d)\n",header[16],header[17],header[18]);
-    if ((received = recv(sock, payload, pl, 0)) != pl) {
-      fprintf(stderr,"Failed to receive msg payload from peer (%d/%d)",received,pl);
-      exit(1);
-    } else {
-      unsigned char *hex = toHex (payload,pl) ;
-      fprintf(stderr, "BGP msg type %s length %d received [%s]\n", showtype(msgtype), pl , hex);
-      free(hex);
-      return 1;
+    if (0 < pl) {
+        if ((received = recv(sock, payload, pl, 0)) != pl) {
+          fprintf(stderr,"Failed to receive msg payload from peer (%d/%d)",received,pl);
+          exit(1);
+        } else
+          received = 0;
     }
+    unsigned char *hex = toHex (payload,pl) ;
+    fprintf(stderr, "BGP msg type %s length %d received [%s]\n", showtype(msgtype), pl , hex);
+    free(hex);
+    return 1;
   }
 }
 
 
 void session(int sock, int fd1 , int fd2) {
   int c;
+  int i = 1;
+  setsockopt( sock, IPPROTO_TCP, TCP_NODELAY, (void *)&i, sizeof(i));
 
-  // if (c=sendfile(sock, fd1, 0, 0x7ffff000) < 0 ) {
-  c=sendfile(sock, fd1, 0, 0x7ffff000);
-  if (c < 0 ) {
-      die("Failed to send fd1 to peer");
-  }
+  (0 < sendfile(sock, fd1, 0, 0x7ffff000)) || die("Failed to send fd1 to peer");
 
   getBGPMessage (sock); // this is expected to be an Open
 
-  c=sendfile(sock, fd2, 0, 0x7ffff000);
-  if (c < 0 ) {
-      die("Failed to send fd2 to peer");
-  }
+  (0 < send(sock, keepalive, 19, 0)) || die("Failed to send keepalive to peer");
 
-  c=send(sock, keepalive, 19, 0);
-  if (c < 0 ) {
-      die("Failed to send keepalive to peer");
-  }
+  getBGPMessage (sock); // this is expected to be a Keepalive
 
-  c=sendfile(sock, fd2, 0, 0x7ffff000);
-  if (c < 0 ) {
-      die("Failed to send fd2 to peer");
-  }
+  (0 < sendfile(sock, fd2, 0, 0x7ffff000)) || die("Failed to send fd2 to peer");
 
   int res;
   do {
@@ -156,11 +144,11 @@ void main(int argc, char *argv[]) {
     peeraddr.sin_family = AF_INET;
     peeraddr.sin_addr.s_addr = htonl(INADDR_ANY);   // local server addr - wildcard - could be a specific interface
     peeraddr.sin_port = htons(179);       // BGP server port
-  
+
     if ((serversock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
       die("Failed to create socket");
     }
-  
+
     int reuse = 1;
     if (setsockopt(serversock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0)
       die("Failed to set server socket option SO_REUSEADDR");
@@ -171,11 +159,11 @@ void main(int argc, char *argv[]) {
     if (bind(serversock, (struct sockaddr *) &peeraddr, SOCKADDRSZ ) < 0) {
       die("Failed to bind the server socket");
     }
-  
+
     if (listen(serversock, MAXPENDING) < 0) {
       die("Failed to listen on server socket");
     }
-  
+
     while (1) {
       unsigned int addrsize;
       fprintf(stderr, "waiting for connection\n");
