@@ -175,8 +175,10 @@ void main(int argc, char *argv[]) {
       memset(&peeraddr, 0, SOCKADDRSZ );
       peeraddr.sin_family = AF_INET;
       peeraddr.sin_addr.s_addr = inet_addr(argv[3]);
-      peeraddr.sin_port = 179;
-      if (connect(peersock, (struct sockaddr *) &peeraddr, SOCKADDRSZ ) < 0) {
+      peeraddr.sin_port = htons(179);
+      if ((peersock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+        die("Failed to create socket");
+      } else if (connect(peersock, (struct sockaddr *) &peeraddr, SOCKADDRSZ ) < 0) {
         die("Failed to connect with peer");
       } else {
           fprintf(stderr, "Peer connected: %s\n", argv[3]);
