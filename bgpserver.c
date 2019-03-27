@@ -16,6 +16,7 @@
 #define MAXPENDING 5    // Max connection requests
 #define BUFFSIZE 0x10000
 #define SOCKADDRSZ (sizeof (struct sockaddr_in))
+#define VERBOSE (0)
 
 int die(char *mess) { perror(mess); exit(1); }
 unsigned char keepalive [19]={ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 19, 4 };
@@ -91,9 +92,12 @@ int getBGPMessage (int sock) {
         } else
           received = 0;
     }
-    unsigned char *hex = toHex (payload,pl) ;
-    fprintf(stderr, "BGP msg type %s length %d received [%s]\n", showtype(msgtype), pl , hex);
-    free(hex);
+    if VERBOSE {
+        unsigned char *hex = toHex (payload,pl) ;
+        fprintf(stderr, "BGP msg type %s length %d received [%s]\n", showtype(msgtype), pl , hex);
+        free(hex);
+    } else
+        fprintf(stderr,"+");
   }
   return 1;
 }
@@ -102,6 +106,8 @@ int getBGPMessage (int sock) {
 void session(int sock, int fd1 , int fd2) {
   int i = 1;
   setsockopt( sock, IPPROTO_TCP, TCP_NODELAY, (void *)&i, sizeof(i));
+  lseek(fd1,0,0);
+  lseek(fd2,0,0);
 
   (0 < sendfile(sock, fd1, 0, 0x7ffff000)) || die("Failed to send fd1 to peer");
 
