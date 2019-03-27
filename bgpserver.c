@@ -59,9 +59,11 @@ unsigned char *toHex (unsigned char *buf, unsigned int l) {
   return (result);
 }
 
-//int getBGPMessage (int sock) {
-//   return 1;
-//}
+void printHex ( FILE * fd, unsigned char *buf, unsigned int l) {
+      unsigned char *hex = toHex (buf,l) ;
+      fprintf(fd, "[%s]\n",hex);
+      free(hex);
+}
 
 int getBGPMessage (int sock) {
   unsigned char header[19];
@@ -72,11 +74,12 @@ int getBGPMessage (int sock) {
   if (0 == received ) {
     fprintf(stderr, "end of stream\n");
     return 0;
-  } else if (received < 0) {
+  } else if (received < 19) {
     die("Failed to receive msg  header from peer");
     return 0;
   } else {
-    unsigned int pl = header[17] << 8 + header[16];
+    printHex (stderr,header,19);
+    unsigned int pl = header[16] << 8 + header[17] - 19 ;
     unsigned char msgtype = header[18];
     if ((received = recv(sock, header, pl, 0)) != pl) {
       die("Failed to receive msg payload from peer");
