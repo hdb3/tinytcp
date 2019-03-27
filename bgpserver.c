@@ -76,13 +76,15 @@ int getBGPMessage (int sock) {
     die("Failed to receive msg  header from peer");
     return 0;
   } else {
-    unsigned int pl = header[16] << 8 + header[17];
+    unsigned int pl = header[17] << 8 + header[16];
     unsigned char msgtype = header[18];
     if ((received = recv(sock, header, pl, 0)) != pl) {
       die("Failed to receive msg payload from peer");
+    } else if (!isMarker(header)) {
+      die("Failed to find BGP marker in msg header from peer");
     } else {
       unsigned char *hex = toHex (buffer,pl) ;
-      fprintf(stderr, "BGP msg type %s length %d received [%s]", showtype(msgtype), pl , hex);
+      fprintf(stderr, "BGP msg type %s length %d received [%s]\n", showtype(msgtype), pl , hex);
       free(hex);
       return 1;
     }
@@ -141,15 +143,23 @@ void main(int argc, char *argv[]) {
   }
 
   if (3 == argc) { // server mode.....
-    if ((serversock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-      die("Failed to create socket");
-    }
-  
+
     memset(&peeraddr, 0, SOCKADDRSZ );
     peeraddr.sin_family = AF_INET;
     peeraddr.sin_addr.s_addr = htonl(INADDR_ANY);   // local server addr - wildcard - could be a specific interface
     peeraddr.sin_port = htons(179);       // BGP server port
   
+    if ((serversock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+      die("Failed to create socket");
+    }
+  
+    int reuse = 1;
+    if (setsockopt(serversock, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0)
+      die("Failed to set server socket option SO_REUSEADDR");
+
+    if (setsockopt(serversock, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0)
+      die("Failed to set server socket option SO_REUSEPORT");
+
     if (bind(serversock, (struct sockaddr *) &peeraddr, SOCKADDRSZ ) < 0) {
       die("Failed to bind the server socket");
     }
