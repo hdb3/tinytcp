@@ -88,7 +88,14 @@ int getBGPMessage (int sock) {
     if (0 < pl) {
         if ((received = recv(sock, payload, pl, 0)) != pl) {
           fprintf(stderr,"Failed to receive msg payload from peer (%d/%d)",received,pl);
-          exit(1);
+          // exit(1);
+          int r2 = recv(sock, payload+received, pl-received,0);
+          if (r2>0)
+             received += r2;
+          else {
+              fprintf(stderr,"Failed to again to receive msg payload from peer (%d/%d)",received,pl);
+              exit(1);
+          }
         } else
           received = 0;
     }
