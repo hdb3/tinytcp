@@ -17,6 +17,7 @@
 #define BUFFSIZE 0x10000
 #define SOCKADDRSZ (sizeof (struct sockaddr_in))
 #define VERBOSE (0)
+#define FAST (0)
 
 int die(char *mess) { perror(mess); exit(1); }
 unsigned char keepalive [19]={ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 19, 4 };
@@ -24,6 +25,8 @@ unsigned char marker [16]={ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
 int isMarker (const unsigned char *buf) {
    return ( 0 == memcmp(buf,marker,16));
 }
+
+int msgcount = 0;
 
 char * showtype (unsigned char msgtype) {
    switch(msgtype) {
@@ -98,13 +101,15 @@ int getBGPMessage ( FILE * fsock) {
         fprintf(stderr, "BGP msg type %s length %d received [%s]\n", showtype(msgtype), pl , hex);
         free(hex);
     } else
-        fprintf(stderr,"+");
+        msgcount++;
+        //fprintf(stderr,"+");
   return 1;
 }
 
 
 void session(int sock, int fd1 , int fd2) {
   int i = 1;
+  msgcount = 0;
   setsockopt( sock, IPPROTO_TCP, TCP_NODELAY, (void *)&i, sizeof(i));
   lseek(fd1,0,0);
   lseek(fd2,0,0);
@@ -121,10 +126,17 @@ void session(int sock, int fd1 , int fd2) {
   (0 < sendfile(sock, fd2, 0, 0x7ffff000)) || die("Failed to send fd2 to peer");
 
   int res;
+  unsigned char *b = malloc(0x10000);
   do {
-    res = getBGPMessage (fsock); // keepalive or updates from now on
-  } while (res);
+      if FAST {
+        res = recv (sock,b,0x10000,0); // keepalive or updates from now on
+        msgcount++;
+      } else
+        res = getBGPMessage (fsock); // keepalive or updates from now on
+  } while (res>0);
   close(sock);
+  fprintf(stderr, "session exit, msg cnt = %d\n",msgcount);
+  msgcount = 0;
 }
 
 int main(int argc, char *argv[]) {
